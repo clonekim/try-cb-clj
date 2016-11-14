@@ -17,15 +17,24 @@
 
 
 (defn connect [^String str]
+  (log/info "Connecting..." str)
   (CouchbaseCluster/fromConnectionString str))
 
 
 (defn disconnect [^CouchbaseCluster cluster]
+  (log/info "Disconnecting..." str)
   (.disconnect cluster))
 
 
-(defn open-bucket [^Bucket bucket name]
-  (.openBucket bucket name))
+(defn open-bucket [^CouchbaseCluster cluster name]
+  (log/info "Openning bucket.." name)
+  (let [bucket (.openBucket cluster name)]
+    (when bucket
+      (log/info "Builing Primary Index for..." name)
+      (-> bucket
+        (.bucketManager)
+        (.createN1qlPrimaryIndex true false)))
+    bucket))
 
 
 ;;; 프로토콜 정의
@@ -301,5 +310,3 @@
            (log/debug "next ..." o)
            (when (fn? on-next)
              (on-next o))))))))
-         
-         (defn)

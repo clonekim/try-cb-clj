@@ -1,7 +1,7 @@
 Try Couchbase
 ===============
 
-Simpley do use couchbase
+Simpliy do use couchbase
 
 ## Usage
 
@@ -20,7 +20,11 @@ Simpley do use couchbase
                            :content "Hi there bla bla bla..."
                            :create_on (java.util.Date.)})
 ;; and returns
-;; {:value {:title "Hello first blogging!" :content "Hi there bla bla bla..." :create_on 149409102932} :id "blog-id" :cas 12309203920}
+{:value 
+        {:title "Hello first blogging!"
+         :content "Hi there bla bla bla..."
+         :create_on 149409102932}
+ :id "blog-id" :cas 12309203920}
 
 
 ;; update/replace
@@ -47,7 +51,7 @@ Simpley do use couchbase
 (user-add {:name "kim" :gender "male"})
 
 ;; and returns
-;; {:value {:user_id "user::1", :name "kim", :gender "male"}, :cas "1479118072773672960", :id "user::1"}
+{:value {:user_id "user::1", :name "kim", :gender "male"}, :cas "1479118072773672960", :id "user::1"}
 
 
 ;; query
@@ -55,16 +59,16 @@ Simpley do use couchbase
 
 ;; and returns
 
-;; {:requestId "2dbaae07-0877-45de-89b5-8a2b334921c6",
-;;  :errors [],
-;;  :status "success",
-;;  :metrics {:executionTime "26.509444ms",
-;;             :resultCount 3,
-;;             :resultSize 583,
-;;             :elapsedTime "26.536883ms"},
-;; :results ({:myblog  {:name "kim"}}
-;;           {:myblog  {:name "kim", :email "clonekim@gmail.com"}}
-;;           {:myblog  {:user_id "user::1", :name "kim", :gender "male"}})}
+{:requestId "2dbaae07-0877-45de-89b5-8a2b334921c6",
+  :errors [],
+  :status "success",
+  :metrics {:executionTime "26.509444ms",
+             :resultCount 3,
+             :resultSize 583,
+             :elapsedTime "26.536883ms"},
+ :results ({:myblog  {:name "kim"}}
+           {:myblog  {:name "kim", :email "clonekim@gmail.com"}}
+           {:myblog  {:user_id "user::1", :name "kim", :gender "male"}})}
 ```
 
 ## License

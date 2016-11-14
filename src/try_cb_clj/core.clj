@@ -1,5 +1,7 @@
 (ns try-cb-clj.core
 
+  (:require [clojure.tools.logging :as log])
+
   (:import [com.couchbase.client.java CouchbaseCluster]
            [com.couchbase.client.java.query N1qlQuery N1qlMetrics]
            [com.couchbase.client.java.document
@@ -11,8 +13,15 @@
            [com.couchbase.client.java.env DefaultCouchbaseEnvironment]
            [com.couchbase.client.java.document.json JsonObject JsonArray JsonNull]
            [rx Observer Observable Subscriber]
-           [java.util.concurrent TimeUnit])))
+           [java.util.concurrent TimeUnit]))
 
+
+(defn connect [^String str]
+  (CouchbaseCluster/fromConnectionString str))
+
+
+(defn disconnect [^CouchbaseCluster cluster]
+  (.disconnect cluster))
 
 
 ;;; 프로토콜 정의
@@ -28,14 +37,25 @@
               (.put jo (name k) (->java v)))
       (JsonObject/empty) o))
 
+
   clojure.lang.IPersistentVector
   (->java [o]
-    (reduce (fn [ja v]
-              (.add ja (->java v)))
+    (reduce (fn [arry v]
+              (.add arry (->java v)))
       (JsonArray/empty) o))
+
 
   java.util.Date
   (->java [o] (.getTime o))
+
+
+  java.lang.String
+  (->java [o]
+    (let [s (-> o .trim)]
+      (if (= 0 (.length s))
+        JsonNull/INSTANCE
+        s)))
+
 
   java.lang.Object
   (->java [o] o)
@@ -56,32 +76,31 @@
 (extend-protocol JavaToClojure
   JsonDocument
   (->clj [o]
-    (->clj
-      {:content (->clj (.content o))
-       :cas (str (.cas o))
-       :id (.id o)}))
+    {:value (->clj (.content o))
+     :cas (str (.cas o))
+     :id (.id o)})
+
+  JsonLongDocument
+  (->clj [o]
+    {:value (.content o)
+     :cas (.cas o)
+     :id (.id o)})
+
+  JsonArrayDocument
+  (->clj [o]
+    {:value (->clj (.content o))
+     :cas (.cas o)
+     :id (.id o)})
+
+  JsonArray
+  (->clj [o]
+    (vec (map ->clj (.toList o))))
 
   JsonObject
   (->clj [o]>
     (reduce (fn [m k]
               (assoc m (keyword k) (->clj (.get o k))))
       {} (.getNames o)))
-
-  JsonArray
-  (->clj [o]
-    (vec (map ->clj (.toList o))))
-
-  JsonLongDocument
-  (->clj [o]
-    {:content (.content o)
-     :cas (.cas o)
-     :id (.id o)})
-
-  JsonArrayDocument
-  (->clj [o]
-    {:content (->clj (.content o))
-     :cas (.cas o)
-     :id (.id o)})
 
   java.lang.Object
   (->clj [o] o)
@@ -98,15 +117,15 @@
 
 
 (defprotocol IBucket
-  (->get    [this bucket args])
-  (->insert [this bucket id]))
+  (create-doc [this id cas])
+  (get-doc    [this bucket args]))
 
 
 (extend-protocol IBucket
 
   ;; get 추상화
   java.lang.Object
-  (->get [this bucket args]
+  (get-doc [this bucket args]
     (let [t (first args)]
       (case t
         :long (to-clj (.get bucket this JsonLongDocument))
@@ -114,32 +133,27 @@
         (to-clj (.get bucket this)))))
 
 
-  ;; insert 추상화
+  ;; create document
   clojure.lang.IPersistentMap
-  (->insert [this bucket id]
-    (->>
-      (to-java this)
-      (JsonDocument/create id)
-      (.insert bucket)
-      to-clj))
+  (create-doc [this id cas]
+    (let [content (to-java this)]
+      (if (nil? cas)
+        (JsonDocument/create id content)
+        (JsonDocument/create id content cas))))
 
 
   clojure.lang.IPersistentVector
-  (->insert [this bucket id]
+  (create-doc [this id]
     (->>
       (to-java this)
-      (JsonArrayDocument/create id)
-      (.insert bucket)
-      to-clj))
+      (JsonArrayDocument/create id)))
 
 
   java.lang.Long
-  (->insert [this bucket id]
+  (create-doc [this id]
     (->>
       (to-java this)
-      (JsonLongDocument/create id)
-      (.insert bucket)
-      to-clj)))
+      (JsonLongDocument/create id))))
 
 
 ;;; couchbase 매크로
@@ -157,19 +171,36 @@
 ;;; couchbase 메서드
 
 (defn insert! [bucket id doc]
-  ;; 벡터, 맵, 숫자를 저장할 수 있다
-  (->insert doc bucket id))
+  (->> (create-doc doc id nil)
+    (.insert bucket)
+    to-clj))
 
 
-(defn upsert! [bucket id doc]
-  (->upsert doc bucket id))
+(defn update! [bucket id doc]
+  (->> (create-doc doc id nil)
+    (.upsert bucket)
+    to-clj))
+
+
+(defn replace!
+
+  ([bucket id doc]
+   (->> (create-doc doc id nil)
+     (.replace bucket)
+     to-clj))
+
+  ([bucket id doc cas]
+   (->> (create-doc doc id cas)
+     (.replace bucket)
+     to-clj)))
 
 
 (defn get! [bucket doc & args]
   ;; JsonLongDocument로 저장된 경우
   ;; 예) (get! *bucket* "hello2" :long)
   ;; 없을 경우 JsonDocument로 가져온다
-  (->get doc bucket args))
+  (get-doc doc bucket args))
+
 
 (defn remove! [bucket id]
   (do
@@ -181,11 +212,20 @@
   (-> (.counter bucket id a b)))
 
 
-(defn to-map [^Observable ob caller]
-  (-> ob
-    (.map (reify rx.functions.Func1
-            (call [this doc]
-              (caller doc))))))
+(defn to-map
+
+  ([^Observable ob]
+   (-> ob
+     (.map (reify rx.functions.Func1
+             (call [this doc]
+               (.content doc))))))
+
+
+  ([^Observable ob caller]
+   (-> ob
+     (.map (reify rx.functions.Func1
+             (call [this doc]
+               (caller doc)))))))
 
 
 (defn flat [^Observable ob caller]
@@ -193,3 +233,65 @@
     (.flatMap (reify rx.functions.Func1
                 (call [this doc]
                   (caller doc))))))
+
+
+
+(defn single!
+  ([^Observable ob]
+   (-> ob
+     (.timeout 1 TimeUnit/SECONDS)
+     (.toBlocking)
+     (.single))))
+
+
+
+(defn first!
+  ([^Observable ob]
+   (-> ob
+     (.timeout 1 TimeUnit/SECONDS)
+     (.toBlocking)
+     (.first))))
+
+
+(defn query
+  ([bucket str]
+   (let [result (->> (N1qlQuery/simple str)
+                  (.query bucket))]
+
+     {:requestId (.requestId result)
+      :errors (to-clj (.errors result))
+      :status (.status result)
+      :metrics (to-clj (.asJsonObject
+                         (.info result)))
+      :results (for [x (.allRows result)]
+                 (to-clj (.value x)))})))
+
+
+(defn subscribe
+  ([^Observable ob]
+   (.subscribe ob))
+
+
+  ([^Observable ob & args]
+   (let [l (apply hash-map args)
+         on-completed (:on-completed l)
+         on-error (:on-error l)
+         on-next (:on-next l)]
+
+     (.subscribe ob
+       (proxy [Subscriber] []
+         (onCompleted []
+           (log/debug "completed!...")
+           (when (fn? on-completed)
+             (on-completed)))
+
+         (onError [throwable]
+           (log/error "error ..." throwable)
+           (if (fn? on-error)
+             (on-error throwable)
+             (throw throwable)))
+
+         (onNext [o]
+           (log/debug "next ..." o)
+           (when (fn? on-next)
+             (on-next o))))))))

@@ -2,7 +2,7 @@
 
   (:require [clojure.tools.logging :as log])
 
-  (:import [com.couchbase.client.java CouchbaseCluster]
+  (:import [com.couchbase.client.java CouchbaseCluster Bucket]
            [com.couchbase.client.java.query N1qlQuery N1qlMetrics]
            [com.couchbase.client.java.document
             JsonDocument
@@ -22,6 +22,10 @@
 
 (defn disconnect [^CouchbaseCluster cluster]
   (.disconnect cluster))
+
+
+(defn open-bucket [^Bucket bucket name]
+  (.openBucket bucket name))
 
 
 ;;; 프로토콜 정의
@@ -143,17 +147,19 @@
 
 
   clojure.lang.IPersistentVector
-  (create-doc [this id]
-    (->>
-      (to-java this)
-      (JsonArrayDocument/create id)))
+  (create-doc [this id cas]
+    (let [content (to-java this)]
+      (if (nil? cas)
+        (JsonArrayDocument/create id content)
+        (JsonArrayDocument/create id content cas))))
 
 
   java.lang.Long
-  (create-doc [this id]
-    (->>
-      (to-java this)
-      (JsonLongDocument/create id))))
+  (create-doc [this id cas]
+    (let [content (to-java this)]
+      (if (nil? cas)
+        (JsonLongDocument/create id content)
+        (JsonLongDocument/create id content cas)))))
 
 
 ;;; couchbase 매크로
@@ -163,7 +169,7 @@
   ;; (async-bucket [bc *bucket*]
   ;;   (-> (counter bc "user::id" 1 1)
   ;;        (to-map)
-  ;;        (to-flat #(
+  ;;        ...
   `(let [~(first binding) (.async ~(second binding))]
      (do ~@body)))
 
@@ -295,3 +301,5 @@
            (log/debug "next ..." o)
            (when (fn? on-next)
              (on-next o))))))))
+         
+         (defn)

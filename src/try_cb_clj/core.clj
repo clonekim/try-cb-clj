@@ -243,7 +243,7 @@
                (caller doc)))))))
 
 
-(defn flat [^Observable ob caller]
+(defn to-flat [^Observable ob caller]
   (-> ob
     (.flatMap (reify rx.functions.Func1
                 (call [this doc]
@@ -256,7 +256,8 @@
    (-> ob
      (.timeout 1 TimeUnit/SECONDS)
      (.toBlocking)
-     (.single))))
+     (.single)
+     to-clj)))
 
 
 
@@ -265,7 +266,8 @@
    (-> ob
      (.timeout 1 TimeUnit/SECONDS)
      (.toBlocking)
-     (.first))))
+     (.first)
+     to-clj)))
 
 
 (defn query

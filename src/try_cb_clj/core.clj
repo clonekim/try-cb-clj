@@ -17,20 +17,16 @@
 
 
 (defn connect [^String str]
-  (log/info "Connecting..." str)
   (CouchbaseCluster/fromConnectionString str))
 
 
 (defn disconnect [^CouchbaseCluster cluster]
-  (log/info "Disconnecting..." str)
   (.disconnect cluster))
 
 
 (defn open-bucket [^CouchbaseCluster cluster name]
-  (log/info "Openning bucket.." name)
   (let [bucket (.openBucket cluster name)]
     (when bucket
-      (log/info "Builing Primary Index for..." name)
       (-> bucket
         (.bucketManager)
         (.createN1qlPrimaryIndex true false)))
@@ -51,7 +47,7 @@
       (JsonObject/empty) o))
 
 
-  clojure.lang.IPersistentVector
+  clojure.lang.IPersistentCollection
   (->java [o]
     (reduce (fn [arry v]
               (.add arry (->java v)))

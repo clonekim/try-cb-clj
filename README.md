@@ -39,7 +39,7 @@ Simpliy do use couchbase
 
 ```clojure
 (defn user-add [doc]
-  (async-bucket [bc ec]
+  (async-bucket [bc bucket]
     (-> (counter bc "user::id" 1 1)
       (to-map)
       (to-flat (fn [id]

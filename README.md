@@ -33,6 +33,12 @@ Simpliy do use couchbase
 ;; delete
 (delete! bucket "abcd")
 
+;; exist
+(.exists bucket "abcd")
+
+;; get
+(get! bucket "abcd")
+
 ```
 
 ## Async Bucket
@@ -69,7 +75,22 @@ Simpliy do use couchbase
  :results ({:myblog  {:name "kim"}}
            {:myblog  {:name "kim", :email "clonekim@gmail.com"}}
            {:myblog  {:user_id "user::1", :name "kim", :gender "male"}})}
+
+
+;; find and insert or get
+;; or You can use upsert method
+(async-bucket [bc bucket]
+  (-> (.exists bc "blog12")
+      (to-flat (fn [finded]
+                (if-not finded
+                   (insert! bc "blog12" {:test "ok"})
+	               (get! bc "blog12"))))
+      (single!)))
+
+;;and returns blog12
+
 ```
+
 
 ## License
 

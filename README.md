@@ -81,8 +81,8 @@ Simpliy do use couchbase
 ;; or You can use upsert method
 (async-bucket [bc bucket]
   (-> (.exists bc "blog12")
-      (to-flat (fn [finded]
-                (if-not finded
+      (to-flat (fn [found]
+                (if-not found
                    (insert! bc "blog12" {:test "ok"})
 	               (get! bc "blog12"))))
       (single!)))

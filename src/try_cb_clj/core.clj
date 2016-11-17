@@ -8,8 +8,7 @@
             JsonDocument
             JsonArrayDocument
             JsonLongDocument
-            JsonBooleanDocument
-            StringDocument]
+            JsonBooleanDocument]
            [com.couchbase.client.java.env DefaultCouchbaseEnvironment]
            [com.couchbase.client.java.document.json JsonObject JsonArray JsonNull]
            [rx Observer Observable Subscriber]
@@ -33,10 +32,10 @@
     bucket))
 
 
-;;; 프로토콜 정의
-;;; 클로저에서 자바로
 
 (defprotocol ClojureToJava
+  "클로저 자료형을 자바자료형으로
+  변환한다"
   (->java [o]))
 
 (extend-protocol ClojureToJava
@@ -76,10 +75,9 @@
   (->java o))
 
 
-;;; 프로토콜 정의
-;;; 자바에서 클로저로
-
 (defprotocol JavaToClojure
+  "프로토콜 정의
+  자바객체를 클로저 자료형으로 변환"
   (->clj [o]))
 
 (extend-protocol JavaToClojure
@@ -92,13 +90,13 @@
   JsonLongDocument
   (->clj [o]
     {:value (.content o)
-     :cas (.cas o)
+     :cas (str (.cas o))
      :id (.id o)})
 
   JsonArrayDocument
   (->clj [o]
     {:value (->clj (.content o))
-     :cas (.cas o)
+     :cas (str (.cas o))
      :id (.id o)})
 
   JsonArray
@@ -121,18 +119,16 @@
   (->clj o))
 
 
-;;; 프로토콜 정의
-;;; Clojure -> Bucket
-
 
 (defprotocol IBucket
+  "프로토콜 정의
+  버킷에서 사용할 도큐먼트를 생성, 가져오기"
   (create-doc [this id cas])
   (get-doc    [this bucket args]))
 
 
 (extend-protocol IBucket
 
-  ;; get 추상화
   java.lang.Object
   (get-doc [this bucket args]
     (let [t (first args)]

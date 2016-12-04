@@ -9,6 +9,7 @@
             JsonArrayDocument
             JsonLongDocument
             JsonBooleanDocument]
+           [com.couchbase.client.java.auth ClassicAuthenticator]
            [com.couchbase.client.java.env DefaultCouchbaseEnvironment]
            [com.couchbase.client.java.document.json JsonObject JsonArray JsonNull]
            [rx Observer Observable Subscriber]
@@ -23,13 +24,23 @@
   (.disconnect cluster))
 
 
-(defn open-bucket [^CouchbaseCluster cluster name]
-  (let [bucket (.openBucket cluster name)]
-    (when bucket
-      (-> bucket
-        (.bucketManager)
-        (.createN1qlPrimaryIndex true false)))
-    bucket))
+(defn open-bucket
+  ([^Bucket bucket]
+   (when bucket
+     (-> bucket
+         (.bucketManager)
+         (.createN1qlPrimaryIndex true false))
+     bucket))
+
+  ([^CouchbaseCluster cluster name]
+   (open-bucket (.openBucket cluster name)))
+
+  ([^CouchbaseCluster cluster name password]
+   (open-bucket
+    (-> cluster
+        (.authenticate (-> (ClassicAuthenticator.)
+                           (.bucket name password)))
+        (.openBucket name password)))))
 
 
 

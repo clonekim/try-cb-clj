@@ -120,6 +120,18 @@
               (assoc m (keyword k) (->clj (.get o k))))
       {} (.getNames o)))
 
+
+  java.util.Map
+  (->clj [o]
+    (reduce (fn [m [^String k v]]
+              (assoc m (keyword k) (->clj v)))
+            {} (.entrySet o)))
+
+  java.util.List
+  (->clj [o]
+    (vec (map ->clj o)))
+
+
   java.lang.Object
   (->clj [o] o)
 

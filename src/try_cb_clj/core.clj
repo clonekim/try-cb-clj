@@ -3,7 +3,7 @@
   (:require [clojure.tools.logging :as log])
 
   (:import [com.couchbase.client.java CouchbaseCluster Bucket]
-           [com.couchbase.client.java.query N1qlQuery N1qlMetrics]
+           [com.couchbase.client.java.query N1qlQuery N1qlMetrics AsyncN1qlQueryResult]
            [com.couchbase.client.java.document
             JsonDocument
             JsonArrayDocument
@@ -142,12 +142,15 @@
   (->clj o))
 
 
+(declare to-map
+         to-flat)
 
 (defprotocol IBucket
   "프로토콜 정의
   버킷에서 사용할 도큐먼트를 생성, 가져오기"
   (create-doc [this id cas])
-  (get-doc    [this bucket args]))
+  (get-doc    [this bucket args])
+  (to-seq     [this]))
 
 
 (extend-protocol IBucket
@@ -183,7 +186,20 @@
     (let [content (to-java this)]
       (if (nil? cas)
         (JsonLongDocument/create id content)
-        (JsonLongDocument/create id content cas)))))
+        (JsonLongDocument/create id content cas))))
+
+  rx.Observable
+  (to-seq [this]
+    (-> this
+        (to-flat (fn [x] (.rows x)))
+        (.toBlocking)
+        (.getIterator)
+        (iterator-seq)))
+  
+  com.couchbase.client.java.query.DefaultN1qlQueryResult
+  (to-seq [this]
+    (-> this
+        (.allRows this))))
 
 
 ;;; couchbase 매크로
@@ -243,7 +259,6 @@
 
 
 (defn to-map
-
   ([^Observable ob]
    (-> ob
      (.map (reify rx.functions.Func1
@@ -265,6 +280,12 @@
                   (caller doc))))))
 
 
+(defn seq! [^Observable ob]
+  (-> ob
+      (to-flat (fn [x] (.rows x)))
+      (.toBlocking)
+      (.getIterator)
+      (iterator-seq)))
 
 (defn single!
   ([^Observable ob]
@@ -285,18 +306,27 @@
      to-clj)))
 
 
-(defn query
-  ([bucket str]
-   (let [result (->> (N1qlQuery/simple str)
-                  (.query bucket))]
+(defn metric [result]
+  {:requestId (.requestId result)
+   :errors (to-clj (.errors result))
+   :status (.status result)
+   :metrics (to-clj (.asJsonObject
+                        (.info result)))})
 
-     {:requestId (.requestId result)
-      :errors (to-clj (.errors result))
-      :status (.status result)
-      :metrics (to-clj (.asJsonObject
-                         (.info result)))
-      :results (for [x (.allRows result)]
-                 (to-clj (.value x)))})))
+
+
+(defn query
+  ([bucket str & args]
+   (let [result (->> (N1qlQuery/simple str)
+                  (.query bucket))
+         with-metric? (:metric (first args) false)]
+     (println "-> " result (type result))
+     (if (instance? Observable result)
+       result
+       (cond-> {}
+         with-metric? (merge (metric result))
+         true (assoc :results (for [x (.allRows result)]
+                                (to-clj (.value x)))))))))
 
 
 (defn subscribe

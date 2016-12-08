@@ -20,11 +20,11 @@ Simpliy do use couchbase
                            :content "Hi there bla bla bla..."
                            :create_on (java.util.Date.)})
 ;; and returns
-{:value 
-        {:title "Hello first blogging!"
-         :content "Hi there bla bla bla..."
-         :create_on 149409102932}
- :id "blog-id" :cas 12309203920}
+{:value  {:title "Hello first blogging!"
+          :content "Hi there bla bla bla..."
+          :create_on 149409102932}
+ :id "blog-id"
+ :cas 12309203920}
 
 
 ;; update/replace
@@ -38,6 +38,30 @@ Simpliy do use couchbase
 
 ;; get
 (get! bucket "abcd")
+
+
+;; query
+(query bucket "select * from myblog")
+
+;; and returns
+({:myblog  {:name "kim"}}
+           {:myblog  {:name "kim", :email "clonekim@gmail.com"}}
+           {:myblog  {:user_id "user::1", :name "kim", :gender "male"}})
+
+;; query with metrics
+(query bucket "select * from myblog" {:with-metrics true})
+
+;; and returns with metrics
+{:requestId "2dbaae07-0877-45de-89b5-8a2b334921c6",
+  :errors [],
+  :status "success",
+  :metrics {:executionTime "26.509444ms",
+             :resultCount 3,
+             :resultSize 583,
+             :elapsedTime "26.536883ms"},
+ :results ({:myblog  {:name "kim"}}
+           {:myblog  {:name "kim", :email "clonekim@gmail.com"}}
+           {:myblog  {:user_id "user::1", :name "kim", :gender "male"}})}
 
 ```
 
@@ -55,26 +79,35 @@ Simpliy do use couchbase
 
 
 (user-add {:name "kim" :gender "male"})
-
 ;; and returns
-{:value {:user_id "user::1", :name "kim", :gender "male"}, :cas "1479118072773672960", :id "user::1"}
+{:value {:user_id "user::1"
+         :name "kim"
+         :gender "male"}
+ :cas "1479118072773672960"
+ :id "user::1"}
 
 
-;; query
-(query bucket "select * from myblog")
 
-;; and returns
+;; if you need to query to be blocked
+(let [result (async-bucket [bc bucket]
+            (-> (query bc "select * from users limit 1")))]
 
-{:requestId "2dbaae07-0877-45de-89b5-8a2b334921c6",
-  :errors [],
-  :status "success",
-  :metrics {:executionTime "26.509444ms",
-             :resultCount 3,
-             :resultSize 583,
-             :elapsedTime "26.536883ms"},
- :results ({:myblog  {:name "kim"}}
-           {:myblog  {:name "kim", :email "clonekim@gmail.com"}}
-           {:myblog  {:user_id "user::1", :name "kim", :gender "male"}})}
+   (println result))
+
+
+;; if you need to query to be not blocked
+(let [result (async-bucket [bc bucket]
+            (-> (query bc "select * from users limit 1" {:with-seq false})
+                (to-flat (fn [x]
+                           ;; your code here))]
+
+   (println result)) ;; rx.Observable
+
+
+
+
+
+
 
 
 ;; find and insert or get

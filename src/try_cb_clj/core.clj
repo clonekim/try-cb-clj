@@ -158,7 +158,7 @@
 (defprotocol IQuery
   "Defines Protocol
   convert query rows to sequence"
-  (to-seq     [this]))
+  (simple-query [this args]))
 
 
 (defprotocol IMetric
@@ -170,17 +170,35 @@
 
 (extend-protocol IQuery
   rx.Observable
-  (to-seq [this]
-    (-> this
-        (to-flat (fn [x] (.rows x)))
-        (.toBlocking)
-        (.getIterator)
-        (iterator-seq)))
+  (simple-query [this args]
+    (let [is-block? (:block args false)
+          with-metric? (:with-metric args false)
+          rows (if is-block?
+                 (for [i (-> this
+                             (to-flat (fn [x] (.rows x)))
+                             (.timeout 1 TimeUnit/SECONDS)
+                             (.toBlocking)
+                             (.getIterator)
+                             (iterator-seq))]
+                   (to-clj (.value i)))
+
+                 (-> this
+                     (to-flat (fn [x] (.rows x)))))]
+
+      (if with-metric?
+        (assoc (get-metrics this) :results rows)
+        rows)))
 
 
   com.couchbase.client.java.query.N1qlQueryResult
-  (to-seq [this]
-    (.allRows this)))
+  (simple-query [this args]
+    (let [with-metric? (:with-metric args false)
+          rows (for [x (.allRows this)]
+                 (to-clj (.value x)))]
+
+      (if with-metric?
+        (assoc (get-metrics this) :results rows)
+        rows))))
 
 
 (extend-protocol IMetric
@@ -319,11 +337,6 @@
                   (caller doc))))))
 
 
-(defn rows [^Observable ob]
-  (to-flat (fn [x]
-             (.rows x)))
-
-
 
 (defn single!
   ([^Observable ob val]
@@ -351,19 +364,10 @@
 (defn query
   ([bucket str & args]
    (let [result (->> (N1qlQuery/simple str)
-                     (.query bucket))
-         with-metric? (:with-metric (first args) false)
-         with-seq? (:with-seq (first args) true)
-         metrics (when with-metric? (get-metrics result))
-         rows (if with-seq?
-                (for [x (to-seq result)]
-                  (to-clj (.value x)))
-                result)]
-
-
-     (if with-metric?
-       (assoc metrics :results rows)
-       rows))))
+                     (.query bucket))]
+     (simple-query result (if-not (nil? args)
+                            (first args)
+                            {:with-metric false})))))
 
 
 (defn subscribe

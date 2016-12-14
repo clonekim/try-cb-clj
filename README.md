@@ -15,6 +15,9 @@ Simpliy do use couchbase
 ;; open bucket
 (def bucket (open-bucket cluster "myblog"))
 
+;; open bucket with password
+(def bucket (open-bucket cluster "myblog" "*****"))
+
 ;; insert
 (insert! bucket "blog-id" {:title "Hello first blogging!"
                            :content "Hi there bla bla bla..."
@@ -26,9 +29,24 @@ Simpliy do use couchbase
  :id "blog-id"
  :cas 12309203920}
 
+;;insert array
+(insert! bucket "items" [ 1 2 3 4 5])
 
-;; update/replace
-(update! bucket "abcd" {:items [1 2 3 4 5]})
+;;and get as array type
+(get-as-array bucket "items")
+
+;; counter
+(counter bucket "order::id" 1 1)
+
+;; get counter
+(get! bucket "order::id" :long) 
+;; or
+(get-as-long bucket "order::id")
+
+;; upsert/replace
+(upsert! bucket "abcd" {:items [1 2 3 4 5]})
+
+(replace! bucket "abcd" {})
 
 ;; delete
 (delete! bucket "abcd")
@@ -90,22 +108,19 @@ Simpliy do use couchbase
 
 ;; if you need to query to be blocked
 (let [result (async-bucket [bc bucket]
-            (-> (query bc "select * from users limit 1")))]
+              (-> (query bc "select * from users limit 1" {:block true})))]
 
    (println result))
 
 
-;; if you need to query to be not blocked
+;; else
 (let [result (async-bucket [bc bucket]
-            (-> (query bc "select * from users limit 1" {:with-seq false})
-                (to-flat (fn [x]
+              (-> (query bc "select * from users limit 1")
+                  (to-map)
+                  (to-flat (fn [x]
                            ;; your code here))]
 
    (println result)) ;; rx.Observable
-
-
-
-
 
 
 

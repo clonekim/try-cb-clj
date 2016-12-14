@@ -3,7 +3,11 @@
   (:require [clojure.tools.logging :as log])
 
   (:import [com.couchbase.client.java CouchbaseCluster Bucket]
-           [com.couchbase.client.java.query N1qlQuery N1qlQueryResult AsyncN1qlQueryResult]
+           [com.couchbase.client.java.query 
+            N1qlQuery 
+            N1qlQueryResult 
+            AsyncN1qlQueryResult 
+            AsyncN1qlQueryRow]
            [com.couchbase.client.java.document
             JsonDocument
             JsonArrayDocument
@@ -92,6 +96,11 @@
   (->clj [o]))
 
 (extend-protocol JavaToClojure
+  
+  AsyncN1qlQueryRow
+  (->clj [o]
+    (->clj (.value o)))
+
   JsonDocument
   (->clj [o]
     {:value (->clj (.content o))
@@ -187,7 +196,9 @@
 
       (if with-metric?
         (assoc (get-metrics this) :results rows)
-        rows)))
+        (if (and is-block? (= 1 (count rows)))
+          (first rows)
+          rows))))
 
 
   com.couchbase.client.java.query.N1qlQueryResult
@@ -198,7 +209,9 @@
 
       (if with-metric?
         (assoc (get-metrics this) :results rows)
-        rows))))
+        (if (= 1 (count rows))
+          (first rows)
+          rows)))))
 
 
 (extend-protocol IMetric
@@ -279,7 +292,7 @@
     to-clj))
 
 
-(defn update! [bucket id doc]
+(defn upsert! [bucket id doc]
   (->> (create-doc doc id nil)
     (.upsert bucket)
     to-clj))
@@ -304,6 +317,14 @@
   (get-doc doc bucket args))
 
 
+(defn get-as-long [bucket doc]
+  (get-doc doc bucket '(:long)))
+
+
+(defn get-as-array [bucket doc]
+  (get-doc doc bucket '(:array)))
+
+
 (defn remove! [bucket id]
   (do
     (.remove bucket id)
@@ -319,7 +340,7 @@
    (-> ob
      (.map (reify rx.functions.Func1
              (call [this doc]
-               (-> (.content doc)
+               (-> doc
                    (to-clj)))))))
 
 

@@ -286,10 +286,15 @@
 
 ;;; couchbase 메서드
 
-(defn insert! [bucket id doc]
-  (->> (create-doc doc id nil)
-    (.insert bucket)
-    to-clj))
+(defn insert!
+
+  ([bucket doc]
+   (insert! bucket (.toString (java.util.UUID/randomUUID)) doc))
+
+  ([bucket id doc]
+   (->> (create-doc doc id nil)
+        (.insert bucket)
+        to-clj)))
 
 
 (defn upsert! [bucket id doc]

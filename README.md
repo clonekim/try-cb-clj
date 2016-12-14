@@ -1,7 +1,6 @@
 Try Couchbase
 ===============
 
-Simpliy do use couchbase
 
 ## Usage
 

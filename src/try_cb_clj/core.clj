@@ -1,5 +1,4 @@
 (ns try-cb-clj.core
-
   (:require [clojure.tools.logging :as log])
 
   (:import [com.couchbase.client.java CouchbaseCluster Bucket]
@@ -9,6 +8,7 @@
             AsyncN1qlQueryResult 
             AsyncN1qlQueryRow]
            [com.couchbase.client.java.document
+            Document
             JsonDocument
             JsonArrayDocument
             JsonLongDocument
@@ -29,23 +29,22 @@
 
 
 (defn open-bucket
-  ([^Bucket bucket]
-   (when bucket
-     (-> bucket
-         (.bucketManager)
-         (.createN1qlPrimaryIndex true false))
-     bucket))
-
   ([^CouchbaseCluster cluster name]
-   (open-bucket (.openBucket cluster name)))
+   (-> cluster
+       (.openBucket name)))
 
   ([^CouchbaseCluster cluster name password]
-   (open-bucket
-    (-> cluster
-        (.authenticate (-> (ClassicAuthenticator.)
-                           (.bucket name password)))
-        (.openBucket name password)))))
+   (-> cluster
+       (.authenticate (-> (ClassicAuthenticator.)
+                          (.bucket name password)))
+       (.openBucket name password))))
 
+
+(defn create-n1qlprimary-index [^Bucket bucket]
+  (when bucket
+    (-> bucket
+        (.bucketManager)
+        (.createN1qlPrimaryIndex true false))))
 
 
 (defprotocol ClojureToJava
@@ -58,14 +57,14 @@
   (->java [o]
     (reduce (fn [jo [k v]]
               (.put jo (name k) (->java v)))
-      (JsonObject/empty) o))
+            (JsonObject/empty) o))
 
 
   clojure.lang.IPersistentCollection
   (->java [o]
     (reduce (fn [arry v]
               (.add arry (->java v)))
-      (JsonArray/empty) o))
+            (JsonArray/empty) o))
 
 
   java.util.Date
@@ -76,8 +75,7 @@
   (->java [o]
     (let [s (-> o .trim)]
       (if (= 0 (.length s))
-        JsonNull/INSTANCE
-        s)))
+        JsonNull/INSTANCE s)))
 
 
   java.lang.Object
@@ -101,23 +99,12 @@
   (->clj [o]
     (->clj (.value o)))
 
-  JsonDocument
+  Document
   (->clj [o]
-    {:value (->clj (.content o))
-     :cas (str (.cas o))
-     :id (.id o)})
-
-  JsonLongDocument
-  (->clj [o]
-    {:value (.content o)
-     :cas (str (.cas o))
-     :id (.id o)})
-
-  JsonArrayDocument
-  (->clj [o]
-    {:value (->clj (.content o))
-     :cas (str (.cas o))
-     :id (.id o)})
+    (assoc (.content o) :meta {:cas (str (.cas o))
+                               :id (.id o)
+                               :expiry (.expiry o)
+                               :token (.mutationToken o)}))
 
   JsonArray
   (->clj [o]
@@ -127,8 +114,7 @@
   (->clj [o]>
     (reduce (fn [m k]
               (assoc m (keyword k) (->clj (.get o k))))
-      {} (.getNames o)))
-
+            {} (.getNames o)))
 
   java.util.Map
   (->clj [o]
@@ -140,7 +126,6 @@
   (->clj [o]
     (vec (map ->clj o)))
 
-
   java.lang.Object
   (->clj [o] o)
 
@@ -149,6 +134,7 @@
 
 (defn to-clj [o]
   (->clj o))
+
 
 
 (declare to-map
@@ -161,24 +147,20 @@
   "프로토콜 정의
   버킷에서 사용할 도큐먼트를 생성, 가져오기"
   (create-doc [this id cas])
-  (get-doc    [this bucket args]))
+  (get-doc    [this bucket as-type]))
 
 
 (defprotocol IQuery
-  "Defines Protocol
-  convert query rows to sequence"
-  (simple-query [this args]))
+  (simple-query [this] [this args]))
 
 
 (defprotocol IMetric
-  "Define Protocol
-   get metrics infomations"
   (get-metrics [this]))
 
 
 
 (extend-protocol IQuery
-  rx.Observable
+  Observable
   (simple-query [this args]
     (let [is-block? (:block args false)
           with-metric? (:with-metric args false)
@@ -196,27 +178,24 @@
 
       (if with-metric?
         (assoc (get-metrics this) :results rows)
-        (if (and is-block? (= 1 (count rows)))
-          (first rows)
-          rows))))
+        rows)))
 
 
-  com.couchbase.client.java.query.N1qlQueryResult
+  N1qlQueryResult
   (simple-query [this args]
+    
     (let [with-metric? (:with-metric args false)
           rows (for [x (.allRows this)]
                  (to-clj (.value x)))]
 
       (if with-metric?
         (assoc (get-metrics this) :results rows)
-        (if (= 1 (count rows))
-          (first rows)
-          rows)))))
+        rows))))
 
 
 (extend-protocol IMetric
 
-  rx.Observable
+  Observable
   (get-metrics [this]
     {:resultId (-> (to-map this (fn [x] (.requestId x)))
                    (single!))
@@ -229,7 +208,7 @@
                   (.asJsonObject)
                   (to-clj))})
 
-  com.couchbase.client.java.query.N1qlQueryResult
+  N1qlQueryResult
   (get-metrics [this]
     {:requestId (.requestId this)
      :errors (to-clj (.errors this))
@@ -240,12 +219,11 @@
 (extend-protocol IBucket
 
   java.lang.Object
-  (get-doc [this bucket args]
-    (let [t (first args)]
-      (case t
-        :long (to-clj (.get bucket this JsonLongDocument))
-        :array (to-clj (.get bucket this JsonArrayDocument))
-        (to-clj (.get bucket this)))))
+  (get-doc [this bucket as-type]
+    (case as-type
+      :long (to-clj (.get bucket this JsonLongDocument))
+      :array (to-clj (.get bucket this JsonArrayDocument))
+      (to-clj (.get bucket this))))
 
 
   clojure.lang.IPersistentMap
@@ -299,35 +277,35 @@
 
 (defn upsert! [bucket id doc]
   (->> (create-doc doc id nil)
-    (.upsert bucket)
-    to-clj))
+       (.upsert bucket)
+       to-clj))
 
 
 (defn replace!
   ([bucket id doc]
    (->> (create-doc doc id nil)
-     (.replace bucket)
-     to-clj))
+        (.replace bucket)
+        to-clj))
 
   ([bucket id doc cas]
    (->> (create-doc doc id cas)
-     (.replace bucket)
-     to-clj)))
+        (.replace bucket)
+        to-clj)))
 
 
-(defn get! [bucket doc & args]
+(defn get! [bucket doc & {:keys [as-type]}]
   "JsonLongDocument로 저장된 경우
    예) (get! *bucket* \"hello\" :long)
    없을 경우 JsonDocument로 가져온다"
-  (get-doc doc bucket args))
+  (get-doc doc bucket as-type))
 
 
 (defn get-as-long [bucket doc]
-  (get-doc doc bucket '(:long)))
+  (get-doc doc bucket :long))
 
 
 (defn get-as-array [bucket doc]
-  (get-doc doc bucket '(:array)))
+  (get-doc doc bucket :array))
 
 
 (defn remove! [bucket id]
@@ -343,34 +321,34 @@
 (defn to-map
   ([^Observable ob]
    (-> ob
-     (.map (reify rx.functions.Func1
-             (call [this doc]
-               (-> doc
-                   (to-clj)))))))
+       (.map (reify rx.functions.Func1
+               (call [this doc]
+                 (-> doc
+                     (to-clj)))))))
 
 
   ([^Observable ob caller]
    (-> ob
-     (.map (reify rx.functions.Func1
-             (call [this doc]
-               (caller doc)))))))
+       (.map (reify rx.functions.Func1
+               (call [this doc]
+                 (caller doc)))))))
 
 
 (defn to-flat [^Observable ob caller]
   (-> ob
-    (.flatMap (reify rx.functions.Func1
-                (call [this doc]
-                  (caller doc))))))
+      (.flatMap (reify rx.functions.Func1
+                  (call [this doc]
+                    (caller doc))))))
 
 
 
 (defn single!
   ([^Observable ob val]
    (-> ob
-     (.timeout 1 TimeUnit/SECONDS)
-     (.toBlocking)
-     (.singleOrDefault val)
-     to-clj))
+       (.timeout 1 TimeUnit/SECONDS)
+       (.toBlocking)
+       (.singleOrDefault val)
+       to-clj))
 
   ([^Observable ob]
    (single! ob nil)))
@@ -380,20 +358,20 @@
 (defn first!
   ([^Observable ob]
    (-> ob
-     (.timeout 1 TimeUnit/SECONDS)
-     (.toBlocking)
-     (.first)
-     to-clj)))
+       (.timeout 1 TimeUnit/SECONDS)
+       (.toBlocking)
+       (.first)
+       to-clj)))
 
 
 
 (defn query
-  ([bucket str & args]
+  ([bucket str & [{:keys [with-metric block] :or {with-metric false block false}}]]
    (let [result (->> (N1qlQuery/simple str)
                      (.query bucket))]
-     (simple-query result (if-not (nil? args)
-                            (first args)
-                            {:with-metric false})))))
+
+     (simple-query result {:block block
+                           :with-metric with-metric}))))
 
 
 (defn subscribe
@@ -408,19 +386,19 @@
          on-next (:on-next l)]
 
      (.subscribe ob
-       (proxy [Subscriber] []
-         (onCompleted []
-           (log/debug "completed!...")
-           (when (fn? on-completed)
-             (on-completed)))
+                 (proxy [Subscriber] []
+                   (onCompleted []
+                     (log/debug "completed!...")
+                     (when (fn? on-completed)
+                       (on-completed)))
 
-         (onError [throwable]
-           (log/error "error ..." throwable)
-           (if (fn? on-error)
-             (on-error throwable)
-             (throw throwable)))
+                   (onError [throwable]
+                     (log/error "error ..." throwable)
+                     (if (fn? on-error)
+                       (on-error throwable)
+                       (throw throwable)))
 
-         (onNext [o]
-           (log/debug "next ..." o)
-           (when (fn? on-next)
-             (on-next o))))))))
+                   (onNext [o]
+                     (log/debug "next ..." o)
+                     (when (fn? on-next)
+                       (on-next o))))))))

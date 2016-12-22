@@ -2,17 +2,8 @@
   (:require [clojure.tools.logging :as log])
 
   (:import [com.couchbase.client.java CouchbaseCluster Bucket]
-           [com.couchbase.client.java.query 
-            N1qlQuery 
-            N1qlQueryResult 
-            AsyncN1qlQueryResult 
-            AsyncN1qlQueryRow]
-           [com.couchbase.client.java.document
-            Document
-            JsonDocument
-            JsonArrayDocument
-            JsonLongDocument
-            JsonBooleanDocument]
+           [com.couchbase.client.java.query N1qlQuery N1qlQueryResult N1qlQueryRow AsyncN1qlQueryResult AsyncN1qlQueryRow]
+           [com.couchbase.client.java.document Document JsonDocument JsonArrayDocument JsonLongDocument JsonBooleanDocument]
            [com.couchbase.client.java.auth ClassicAuthenticator]
            [com.couchbase.client.java.env DefaultCouchbaseEnvironment]
            [com.couchbase.client.java.document.json JsonObject JsonArray JsonNull]
@@ -94,17 +85,22 @@
   (->clj [o]))
 
 (extend-protocol JavaToClojure
-  
+
   AsyncN1qlQueryRow
+  (->clj [o]
+    (->clj (.value o)))
+
+  N1qlQueryRow
   (->clj [o]
     (->clj (.value o)))
 
   Document
   (->clj [o]
-    (assoc (.content o) :meta {:cas (str (.cas o))
-                               :id (.id o)
-                               :expiry (.expiry o)
-                               :token (.mutationToken o)}))
+    {:cas (str (.cas o))
+     :id (.id o)
+     :expiry (.expiry o)
+     :token (.mutationToken o)
+     :value (->clj (.content o))})
 
   JsonArray
   (->clj [o]
@@ -171,7 +167,7 @@
                              (.toBlocking)
                              (.getIterator)
                              (iterator-seq))]
-                   (to-clj (.value i)))
+                   (to-clj i))
 
                  (-> this
                      (to-flat (fn [x] (.rows x)))))]
@@ -183,10 +179,10 @@
 
   N1qlQueryResult
   (simple-query [this args]
-    
+
     (let [with-metric? (:with-metric args false)
-          rows (for [x (.allRows this)]
-                 (to-clj (.value x)))]
+          rows (for [i (.allRows this)]
+                 (to-clj i))]
 
       (if with-metric?
         (assoc (get-metrics this) :results rows)
@@ -315,7 +311,8 @@
 
 
 (defn counter [bucket id a b]
-  (-> (.counter bucket id a b)))
+  (-> (.counter bucket id a b)
+      (to-clj)))
 
 
 (defn to-map
@@ -323,15 +320,15 @@
    (-> ob
        (.map (reify rx.functions.Func1
                (call [this doc]
-                 (-> doc
-                     (to-clj)))))))
+                 (to-clj doc))))))
 
 
   ([^Observable ob caller]
    (-> ob
        (.map (reify rx.functions.Func1
                (call [this doc]
-                 (caller doc)))))))
+                 (caller (to-clj doc))))))))
+
 
 
 (defn to-flat [^Observable ob caller]
@@ -339,7 +336,6 @@
       (.flatMap (reify rx.functions.Func1
                   (call [this doc]
                     (caller doc))))))
-
 
 
 (defn single!
@@ -369,7 +365,6 @@
   ([bucket str & [{:keys [with-metric block] :or {with-metric false block false}}]]
    (let [result (->> (N1qlQuery/simple str)
                      (.query bucket))]
-
      (simple-query result {:block block
                            :with-metric with-metric}))))
 

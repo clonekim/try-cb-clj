@@ -96,11 +96,7 @@
 
   Document
   (->clj [o]
-    {:cas (str (.cas o))
-     :id (.id o)
-     :expiry (.expiry o)
-     :token (.mutationToken o)
-     :value (->clj (.content o))})
+    (->clj (.content o)))
 
   JsonArray
   (->clj [o]
@@ -128,8 +124,31 @@
   nil
   (->clj [o] nil))
 
-(defn to-clj [o]
-  (->clj o))
+
+(defprotocol ICas
+  (with-cas [this]))
+
+(extend-protocol ICas
+  Document
+  (with-cas [o]
+    {:cas (str (.cas o))
+     :id (.id o)
+     :expiry (.expiry o)
+     :token (.mutationToken o)
+     :value (to-clj o)})
+
+  java.lang.Object
+  (with-cas [o] o))
+
+
+(defn to-clj 
+  ([o]
+   (->clj o))
+
+  ([o with-cas?]
+   (if with-cas?
+     (with-cas o)
+     (to-clj o))))
 
 
 
@@ -143,7 +162,7 @@
   "프로토콜 정의
   버킷에서 사용할 도큐먼트를 생성, 가져오기"
   (create-doc [this id cas])
-  (get-doc    [this bucket as-type]))
+  (get-doc    [this bucket as-type with-cas]))
 
 
 (defprotocol IQuery
@@ -215,11 +234,11 @@
 (extend-protocol IBucket
 
   java.lang.Object
-  (get-doc [this bucket as-type]
+  (get-doc [this bucket as-type with-cas]
     (case as-type
-      :long (to-clj (.get bucket this JsonLongDocument))
-      :array (to-clj (.get bucket this JsonArrayDocument))
-      (to-clj (.get bucket this))))
+      :long (to-clj (.get bucket this JsonLongDocument) with-cas)
+      :array (to-clj (.get bucket this JsonArrayDocument) with-cas)
+      (to-clj (.get bucket this) with-cas)))
 
 
   clojure.lang.IPersistentMap
@@ -261,47 +280,64 @@
 ;;; couchbase 메서드
 
 (defn insert!
-
   ([bucket doc]
-   (insert! bucket (.toString (java.util.UUID/randomUUID)) doc))
+   (insert! bucket doc nil))
 
-  ([bucket id doc]
+  ([bucket doc {:keys [with-cas] :or {with-cas false} }]
+   (insert! bucket (.toString (java.util.UUID/randomUUID)) doc {:with-cas with-cas}))
+
+  ([bucket id doc {:keys [with-cas] :or {with-cas false}}]
+   (->
+    (->> (create-doc doc id nil)
+         (.insert bucket)) 
+    (to-clj with-cas))))
+
+
+(defn upsert! [bucket id doc & [{:keys [with-cas] :or {with-cas false} }]]
+  (->
    (->> (create-doc doc id nil)
-        (.insert bucket)
-        to-clj)))
-
-
-(defn upsert! [bucket id doc]
-  (->> (create-doc doc id nil)
-       (.upsert bucket)
-       to-clj))
+        (.upsert bucket))
+   (to-clj with-cas)))
 
 
 (defn replace!
   ([bucket id doc]
-   (->> (create-doc doc id nil)
-        (.replace bucket)
-        to-clj))
+   (replace! bucket id doc nil))
 
-  ([bucket id doc cas]
-   (->> (create-doc doc id cas)
-        (.replace bucket)
-        to-clj)))
+  ([bucket id doc {:keys [with-cas] :or {with-cas false}}]
+   (->
+    (->> (create-doc doc id nil)
+         (.replace bucket))
+    (to-clj with-cas)))
+
+  ([bucket id doc cas {:keys [with-cas] :or {with-cas false}}]
+   (-> 
+    (->> (create-doc doc id cas)
+         (.replace bucket))
+    (to-clj with-cas))))
 
 
-(defn get! [bucket doc & {:keys [as-type]}]
+(defn get! [bucket doc & [{:keys [as-type with-cas] :or {with-cas false}}]]
   "JsonLongDocument로 저장된 경우
    예) (get! *bucket* \"hello\" :long)
    없을 경우 JsonDocument로 가져온다"
-  (get-doc doc bucket as-type))
+  (get-doc doc bucket as-type with-cas))
 
 
-(defn get-as-long [bucket doc]
-  (get-doc doc bucket :long))
+(defn get-as-long 
+  ([bucket id]
+   (get-doc id bucket :long false))
+
+  ([bucket id {:keys [with-cas]}]
+   (get-doc id bucket :long with-cas)))
 
 
-(defn get-as-array [bucket doc]
-  (get-doc doc bucket :array))
+(defn get-as-array 
+  ([bucket id]
+   (get-doc id bucket :array false))
+
+  ([bucket id {:keys [with-cas]}]
+   (get-doc id bucket :array with-cas)))
 
 
 (defn remove! [bucket id]
@@ -310,9 +346,9 @@
     true))
 
 
-(defn counter [bucket id a b]
+(defn counter [bucket id a b {:keys [with-cas] :or {with-cas false}}]
   (-> (.counter bucket id a b)
-      (to-clj)))
+      (to-clj with-cas)))
 
 
 (defn to-map
@@ -362,8 +398,10 @@
 
 
 (defn query
-  ([bucket str & [{:keys [with-metric block] :or {with-metric false block false}}]]
-   (let [result (->> (N1qlQuery/simple str)
+  ([bucket [str & params] & [{:keys [with-metric block] :or {with-metric false block false}}]]
+   (let [result (->> (if (nil? params)
+                       (N1qlQuery/simple str)
+                       (N1qlQuery/parameterized str (to-java params)))
                      (.query bucket))]
      (simple-query result {:block block
                            :with-metric with-metric}))))

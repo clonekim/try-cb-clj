@@ -26,8 +26,6 @@
 
   ([^CouchbaseCluster cluster name password]
    (-> cluster
-       (.authenticate (-> (ClassicAuthenticator.)
-                          (.bucket name password)))
        (.openBucket name password))))
 
 
@@ -141,7 +139,7 @@
   (with-cas [o] o))
 
 
-(defn to-clj 
+(defn to-clj
   ([o]
    (->clj o))
 
@@ -289,7 +287,7 @@
   ([bucket id doc {:keys [with-cas] :or {with-cas false}}]
    (->
     (->> (create-doc doc id nil)
-         (.insert bucket)) 
+         (.insert bucket))
     (to-clj with-cas))))
 
 
@@ -311,7 +309,7 @@
     (to-clj with-cas)))
 
   ([bucket id doc cas {:keys [with-cas] :or {with-cas false}}]
-   (-> 
+   (->
     (->> (create-doc doc id cas)
          (.replace bucket))
     (to-clj with-cas))))
@@ -324,7 +322,7 @@
   (get-doc doc bucket as-type with-cas))
 
 
-(defn get-as-long 
+(defn get-as-long
   ([bucket id]
    (get-doc id bucket :long false))
 
@@ -332,7 +330,7 @@
    (get-doc id bucket :long with-cas)))
 
 
-(defn get-as-array 
+(defn get-as-array
   ([bucket id]
    (get-doc id bucket :array false))
 

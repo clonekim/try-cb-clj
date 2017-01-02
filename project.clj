@@ -9,4 +9,4 @@
                          ["snapshots" :clojars]]
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [org.clojure/tools.logging "0.3.1"]
-                 [com.couchbase.client/java-client "2.3.4"]])
+                 [com.couchbase.client/java-client "2.3.6"]])

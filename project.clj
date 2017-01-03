@@ -1,4 +1,4 @@
-(defproject try-cb-clj "0.1.4"
+(defproject try-cb-clj "0.1.5"
   :description "Using Couchbase from Clojure"
   :url "http://clonekim.github.io"
   :license {:name "Eclipse Public License"

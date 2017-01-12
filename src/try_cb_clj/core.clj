@@ -364,6 +364,13 @@
        (.first)
        to-clj)))
 
+(defn last!
+  ([^Observable ob]
+   (-> ob
+       (.timeout 1 TimeUnit/SECONDS)
+       (.toBlocking)
+       (.last)
+       to-clj)))
 
 
 (defn query [bucket [str & params] & [{:keys [with-metric block] :or {with-metric false block false}}]]

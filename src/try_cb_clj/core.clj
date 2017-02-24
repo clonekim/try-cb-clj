@@ -45,7 +45,7 @@
   clojure.lang.IPersistentMap
   (->java [o]
     (reduce (fn [jo [k v]]
-              (.put jo (name k) (->java v)))
+              (.put jo (.replace (name k) "-" "_") (->java v)))
             (JsonObject/empty) o))
 
 
@@ -374,9 +374,10 @@
 
 
 (defn query [bucket [str & params] & [{:keys [with-metric block] :or {with-metric false block false}}]]
-  (let [result (->> (if (nil? params)
+  (let [is-map? (map? (first params))
+        result (->> (if (nil? params)
                       (N1qlQuery/simple str)
-                      (N1qlQuery/parameterized str (to-java params)))
+                      (N1qlQuery/parameterized str (if is-map? (to-java (first params)) (to-java params))))
                     (.query bucket))]
     (simple-query result {:block block
                           :with-metric with-metric})))

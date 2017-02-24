@@ -1,4 +1,4 @@
-(defproject try-cb-clj "0.1.5"
+(defproject try-cb-clj "0.1.6"
   :description "Using Couchbase from Clojure"
   :url "http://clonekim.github.io"
   :license {:name "Eclipse Public License"
@@ -9,4 +9,4 @@
                          ["snapshots" :clojars]]
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [org.clojure/tools.logging "0.3.1"]
-                 [com.couchbase.client/java-client "2.3.6"]])
+                 [com.couchbase.client/java-client "2.4.2"]])

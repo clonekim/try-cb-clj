@@ -1,6 +1,7 @@
 # Try Couchbase
 
 
+http://docs.couchbase.com/sdk-api/couchbase-java-client-2.4.2/
 
 ## Usage
 
@@ -49,7 +50,7 @@
                            :create_on (java.util.Date.)})
 ```
 
-and returns values
+and returns values  
 it has always id, cas, value
 
 ```clojure
@@ -69,14 +70,14 @@ it has always id, cas, value
 ### getting a document
 
 
-with document id can get a document,
+with document id can get a document,  
 if document not found you get a nill
 
 ```clojure
 (get! "blog-id")
 ```
 
-do not want to dealing with nil?
+do not want to dealing with nil?  
 you can find out
 
 ```clojure
@@ -84,7 +85,7 @@ you can find out
 true
 ```
 
-if document found
+if document found  
 and returns
 
 ```clojure
@@ -95,8 +96,21 @@ and returns
  :cas 12309203920}
 ```
 
-document like array or long types
-you must use get-as-[type]
+also supports lock
+
+```clojure
+(get! bucket "hello-world" {:locktime 2000})
+(upsert! bucket "hello-world" {:operated-by "daehee"})
+
+;;OnNextValue 
+;;OnError while
+;;emitting onNext value:
+;;com.couchbase.client.core.message.kv.UpsertResponse.class 
+;;rx.exceptions.OnErrorThrowable.addValueAsLastCause (OnErrorThrowable.java:118)
+```
+
+document like array or long types  
+you must use get-as-[type]  
 for example
 
 ```clojure
@@ -124,7 +138,8 @@ return true of false
 (remove! bucket "abcd")
 ```
 
-### 4. Atomic operation
+## 4. Atomic operation
+
 
 **creating counter**
 
@@ -133,6 +148,20 @@ return true of false
 ;; create counter
 (counter bucket "order::id" 1 1)
 ```
+
+**how to start counter from init value**
+couter will start from 10
+
+```clojure
+(counter bucket "user:id" 0 10)
+```
+
+and increment by 1
+
+```clojure
+(counter bucket "user:id" 1)
+```
+
 
 and returns
 
@@ -146,10 +175,12 @@ and returns
 
 ```clojure
 (get-as-long bucket "order::id")
+;; or
+(get! bucket "order::id" {:as :long})
 ```
 
 
-### 5. Query
+## 5. Query
 
 **simple query**
 
@@ -189,7 +220,8 @@ and returns with metrics
   :errors [],
   :status "success",
   :metrics {:executionTime "26.509444ms",
-             :resultCount 3,
+             :resultCount 13,
+             :sortCount 3,
              :resultSize 583,
              :elapsedTime "26.536883ms"},
  :results ({:myblog  {:name "kim"}}
@@ -200,7 +232,7 @@ and returns with metrics
 
 ## Async Bucket
 
- single! or first! , last!
+single! or first! , last!  
 you feel async query is much like sync operation
 
 ```clojure
@@ -228,7 +260,8 @@ and returns
 ```
 
 
-you can run async query to be blocked explicitly
+you can run async query to be blocked explicitly  
+use param `{:block true}`
 
 ```clojure
 (let [result (async-bucket [bc bucket]
@@ -250,8 +283,7 @@ can also
 
 
 
-find and insert or get
-or You can use upsert method
+conditional performs insert or get
 
 ```clojure
 (async-bucket [bc bucket]

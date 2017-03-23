@@ -119,6 +119,11 @@ for example
 (get-as-array bucket "items")
 
 (get-as-long bucket "order::id")
+
+;;or
+(get! bucket "items" {:as :array})
+
+(get! bucket "order::id" {:as :long})
 ```
 
 
@@ -151,6 +156,7 @@ return true of false
 ```
 
 **how to start counter from init value**
+
 couter will start from 10
 
 ```clojure
@@ -228,6 +234,17 @@ and returns with metrics
  :results ({:myblog  {:name "kim"}}
            {:myblog  {:name "kim", :email "clonekim@gmail.com"}}
            {:myblog  {:user_id "user::1", :name "kim", :gender "male"}})}
+
+```
+
+## Setting Durability
+
+https://developer.couchbase.com/documentation/server/4.0/developer-guide/durability.html
+
+```clojure
+(set-default-durability {:persis-to :ONE
+                         :replicate-to :NONE
+                         :scan-consistency :REQUEST_PLUS})
 
 ```
 

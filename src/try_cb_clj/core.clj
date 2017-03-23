@@ -12,6 +12,13 @@
            [java.util.concurrent TimeUnit]))
 
 
+(declare to-map
+         to-flat
+         single!
+         first!
+         to-clj
+         to-java)
+
 (defn connect [^String str]
   "connect to server
    examples
@@ -33,6 +40,14 @@
    (-> cluster
        (.openBucket name password))))
 
+
+(defn get-info [bucket]
+  "http://docs.couchbase.com/sdk-api/couchbase-java-client-2.4.2/com/couchbase/client/java/bucket/BucketInfo.html"
+  (-> bucket
+      (.bucketManager)
+      (.info)
+      (.raw)
+      to-clj))
 
 (defn create-n1qlprimary-index [^Bucket bucket]
   (when bucket
@@ -132,6 +147,7 @@
   java.lang.Object
   (->clj [o] o)
 
+  
   nil
   (->clj [o] nil))
 
@@ -141,10 +157,6 @@
 
 
 
-(declare to-map
-         to-flat
-         single!
-         first!)
 
 
 (defprotocol IBucket
@@ -315,9 +327,11 @@
 
 
 (defn remove! [bucket id]
-  (do
-    (.remove bucket id PersistTo/ONE)
-    true))
+  (if (.exists bucket id)
+    (do
+      (.remove bucket id PersistTo/ONE)
+      true)
+    false))
 
 
 (defn counter [bucket id a b]

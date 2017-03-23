@@ -1,7 +1,7 @@
 (ns try-cb-clj.core
   (:require [clojure.tools.logging :as log])
 
-  (:import [com.couchbase.client.java CouchbaseCluster Bucket PersistTo]
+  (:import [com.couchbase.client.java CouchbaseCluster Bucket PersistTo ReplicateTo]
            [com.couchbase.client.java.query N1qlQuery N1qlQueryResult N1qlQueryRow N1qlParams AsyncN1qlQueryResult AsyncN1qlQueryRow]
            [com.couchbase.client.java.query.consistency ScanConsistency]
            [com.couchbase.client.java.document Document JsonDocument JsonArrayDocument JsonLongDocument JsonBooleanDocument]
@@ -18,6 +18,17 @@
          first!
          to-clj
          to-java)
+
+(defonce ^:private default-durability (atom {:persist-to (PersistTo/valueOf "MASTER")
+                                             :replicate-to (ReplicateTo/valueOf "NONE")
+                                             :scan-consistency (ScanConsistency/valueOf "NOT_BOUNDED")}))
+
+(defn set-default-durability [{:keys [persist-to replicate-to scan-consistency] :or {persist-to :MASTER replicate-to :NONE :scan-consistency :NOT_BOUNDED}}]
+
+  (reset! default-durability {:persist-to (PersistTo/valueOf (name persist-to))
+                              :replicate-to (ReplicateTo/valueOf (name replicate-to))
+                              :scan-consistency (ScanConsistency/valueOf (name scan-consistency))}))
+
 
 (defn connect [^String str]
   "connect to server
@@ -233,13 +244,25 @@
 
 
 (extend-protocol IBucket
-
   java.lang.Object
-  (get-doc [this bucket as-type]
-    (case as-type
-      :long (to-clj (.get bucket this JsonLongDocument))
-      :array (to-clj (.get bucket this JsonArrayDocument))
-      (to-clj (.get bucket this))))
+  (get-doc [this bucket {:keys [as timeout locktime] :or {timeout (.kvTimeout (.environment bucket))}}]
+    "timeout is followed by Couchbase Environment, kvTimout (default 2500)
+     locktime is max 30(seconds)"
+    (let [lock? (pos? (if (number? locktime) locktime 0))]
+      (if-let [klass (case as
+                       :long JsonLongDocument
+                       :array JsonArrayDocument
+                       nil)]
+        
+        (to-clj
+         (if lock?
+           (.getAndLock bucket this locktime klass)
+           (.get bucket this klass timeout TimeUnit/MILLISECONDS)))
+          
+        (to-clj 
+         (if lock?
+           (.getAndLock bucket this locktime )
+           (.get bucket this timeout TimeUnit/MILLISECONDS))))))
 
 
   clojure.lang.IPersistentMap
@@ -286,57 +309,61 @@
 
   ([bucket id doc]
    (-> bucket
-       (.insert (create-doc doc id nil) PersistTo/ONE)
+       (.insert (create-doc doc id nil) (:persist-to @default-durability) (:replicate-to @default-durability))
        to-clj)))
-
 
 
 (defn upsert! [bucket id doc]
   (-> bucket
-      (.upsert (create-doc doc id nil) PersistTo/ONE)
+      (.upsert (create-doc doc id nil) (:persist-to @default-durability) (:replicate-to @default-durability))
       to-clj))
 
 
 (defn replace!
   ([bucket id doc]
    (-> bucket
-       (.replace (create-doc doc id nil) PersistTo/ONE)
+       (.replace (create-doc doc id nil) (:persist-to @default-durability) (:replicate-to @default-durability))
        to-clj))
 
   ([bucket id doc cas]
    (-> bucket
-       (.replace (create-doc doc id cas) PersistTo/ONE)
+       (.replace (create-doc doc id cas) (:persist-to @default-durability) (:replicate-to @default-durability))
         to-clj)))
 
 
 
-(defn get! [bucket doc-id]
+(defn get! [bucket doc-id & args]
   "JsonLongDocument로 저장된 경우
    예) (get! *bucket* \"hello\" :long)
    없을 경우 JsonDocument로 가져온다"
-  (get-doc doc-id bucket nil))
+  (get-doc doc-id bucket (or (first args) {})))
 
 
 
 (defn get-as-long [bucket doc-id]
-  (get-doc doc-id bucket :long))
+  (get-doc doc-id bucket {:as :long}))
 
 
 (defn get-as-array [bucket doc-id]
-  (get-doc doc-id bucket :array))
+  (get-doc doc-id bucket {:as :array}))
 
 
 (defn remove! [bucket id]
   (if (.exists bucket id)
     (do
-      (.remove bucket id PersistTo/ONE)
+      (.remove bucket id (:persist-to @default-durability) (:replicate-to @default-durability))
       true)
     false))
 
 
-(defn counter [bucket id a b]
-  (-> (.counter bucket id a b)
-      (to-clj)))
+(defn counter
+  ([bucket id delta inital]
+   (-> (.counter bucket id delta inital)
+       (to-clj)))
+
+  ([bucket id delta]
+   (-> (.counter bucket id delta)
+       (to-clj))))
 
 
 (defn to-map
@@ -395,7 +422,7 @@
 (defn query [bucket [str & params] & [{:keys [with-metric block] :or {with-metric false block false}}]]
   (let [is-map? (map? (first params))
         n1ql-param (-> (N1qlParams/build)
-                     (.consistency ScanConsistency/REQUEST_PLUS))
+                     (.consistency (:scan-consistency @default-durability)))
         result (->> (if (nil? params)
                       (N1qlQuery/simple str n1ql-param)
                       (N1qlQuery/parameterized str (if is-map? (to-java (first params)) (to-java params)) n1ql-param))

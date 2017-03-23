@@ -99,7 +99,8 @@ and returns
 also supports lock
 
 ```clojure
-(get! bucket "hello-world" {:locktime 2000})
+;;5secs (max: 30 secs)
+(get! bucket "hello-world" {:locktime 5})
 (upsert! bucket "hello-world" {:operated-by "daehee"})
 
 ;;OnNextValue 

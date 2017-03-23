@@ -1,8 +1,9 @@
 (ns try-cb-clj.core
   (:require [clojure.tools.logging :as log])
 
-  (:import [com.couchbase.client.java CouchbaseCluster Bucket]
-           [com.couchbase.client.java.query N1qlQuery N1qlQueryResult N1qlQueryRow AsyncN1qlQueryResult AsyncN1qlQueryRow]
+  (:import [com.couchbase.client.java CouchbaseCluster Bucket PersistTo]
+           [com.couchbase.client.java.query N1qlQuery N1qlQueryResult N1qlQueryRow N1qlParams AsyncN1qlQueryResult AsyncN1qlQueryRow]
+           [com.couchbase.client.java.query.consistency ScanConsistency]
            [com.couchbase.client.java.document Document JsonDocument JsonArrayDocument JsonLongDocument JsonBooleanDocument]
            [com.couchbase.client.java.auth ClassicAuthenticator]
            [com.couchbase.client.java.env DefaultCouchbaseEnvironment]
@@ -12,6 +13,10 @@
 
 
 (defn connect [^String str]
+  "connect to server
+   examples
+   couchbase://localhost or
+   couchbase://10.1.0.1,10.1.0.2"
   (CouchbaseCluster/fromConnectionString str))
 
 
@@ -268,27 +273,27 @@
    (insert! bucket (.toString (java.util.UUID/randomUUID)) doc))
 
   ([bucket id doc]
-   (->> (create-doc doc id nil)
-        (.insert bucket)
-        to-clj)))
+   (-> bucket
+       (.insert (create-doc doc id nil) PersistTo/ONE)
+       to-clj)))
 
 
 
 (defn upsert! [bucket id doc]
-  (->> (create-doc doc id nil)
-       (.upsert bucket)
-       to-clj))
+  (-> bucket
+      (.upsert (create-doc doc id nil) PersistTo/ONE)
+      to-clj))
 
 
 (defn replace!
   ([bucket id doc]
-   (->> (create-doc doc id nil)
-        (.replace bucket)
-        to-clj))
+   (-> bucket
+       (.replace (create-doc doc id nil) PersistTo/ONE)
+       to-clj))
 
   ([bucket id doc cas]
-   (->> (create-doc doc id cas)
-        (.replace bucket)
+   (-> bucket
+       (.replace (create-doc doc id cas) PersistTo/ONE)
         to-clj)))
 
 
@@ -311,7 +316,7 @@
 
 (defn remove! [bucket id]
   (do
-    (.remove bucket id)
+    (.remove bucket id PersistTo/ONE)
     true))
 
 
@@ -375,15 +380,18 @@
 
 (defn query [bucket [str & params] & [{:keys [with-metric block] :or {with-metric false block false}}]]
   (let [is-map? (map? (first params))
+        n1ql-param (-> (N1qlParams/build)
+                     (.consistency ScanConsistency/REQUEST_PLUS))
         result (->> (if (nil? params)
-                      (N1qlQuery/simple str)
-                      (N1qlQuery/parameterized str (if is-map? (to-java (first params)) (to-java params))))
+                      (N1qlQuery/simple str n1ql-param)
+                      (N1qlQuery/parameterized str (if is-map? (to-java (first params)) (to-java params)) n1ql-param))
                     (.query bucket))]
     (simple-query result {:block block
                           :with-metric with-metric})))
 
 
 (defn subscribe
+  "TODO"
   ([^Observable ob]
    (.subscribe ob))
 

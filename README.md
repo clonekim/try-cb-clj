@@ -138,7 +138,7 @@ for example
 
 ### Remove
 
-return true of false
+return true or false
 
 ```clojure
 (remove! bucket "abcd")

@@ -1,6 +1,6 @@
 # Try Couchbase
 
-
+Couchbase (카우치베이스 NoSQL서버)를 클로저에서 사용하기 위한 Wrapper입니다.  
 http://docs.couchbase.com/sdk-api/couchbase-java-client-2.4.2/
 
 ## Usage

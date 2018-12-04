@@ -23,11 +23,11 @@
                                              :replicate-to (ReplicateTo/valueOf "NONE")
                                              :scan-consistency (ScanConsistency/valueOf "NOT_BOUNDED")}))
 
-(defn set-default-durability [{:keys [persist-to replicate-to scan-consistency] :or {persist-to :MASTER replicate-to :NONE :scan-consistency :NOT_BOUNDED}}]
+(defn set-default-durability [{:keys [persist-to replicate-to scan-consistency]}]
 
-  (reset! default-durability {:persist-to (PersistTo/valueOf (name persist-to))
-                              :replicate-to (ReplicateTo/valueOf (name replicate-to))
-                              :scan-consistency (ScanConsistency/valueOf (name scan-consistency))}))
+  (reset! default-durability {:persist-to (PersistTo/valueOf persist-to)
+                              :replicate-to (ReplicateTo/valueOf replicate-to)
+                              :scan-consistency (ScanConsistency/valueOf scan-consistency)}))
 
 
 (defn connect [^String str]
@@ -49,7 +49,13 @@
 
   ([^CouchbaseCluster cluster name password]
    (-> cluster
-       (.openBucket name password))))
+       (.openBucket name password)))
+
+  ([^CouchbaseCluster cluster bucketname username password]
+   (doto
+       (-> cluster
+           (.authenticate username password)
+           (.openBucket bucketname)))))
 
 
 (defn get-info [bucket]

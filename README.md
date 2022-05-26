@@ -3,6 +3,17 @@
 Couchbase (카우치베이스 NoSQL서버)를 클로저에서 사용하기 위한 Wrapper입니다.  
 http://docs.couchbase.com/sdk-api/couchbase-java-client-2.4.2/
 
+
+[maven here](https://mvnrepository.com/artifact/try-cb-clj/try-cb-clj/0.1.7)
+
+```
+<dependency>
+  <groupId>try-cb-clj</groupId>
+  <artifactId>try-cb-clj</artifactId>
+  <version>0.1.7</version>
+</dependency>
+```
+
 ## Usage
 
 ```clojure
